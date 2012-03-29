@@ -23,4 +23,3 @@ admin.site.register(TestModelOne, SoftDeleteObjectAdmin)
 admin.site.register(TestModelTwo, SoftDeleteObjectAdmin)
 admin.site.register(TestModelThree, SoftDeleteObjectAdmin)
 admin.site.register(TestModelThrough, SoftDeleteObjectAdmin)
-

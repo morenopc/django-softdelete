@@ -1,6 +1,5 @@
 from django.forms import *
 from softdelete.models import *
-from softdelete.forms import *
 import logging
 
 class SoftDeleteObjectAdminForm(ModelForm):
@@ -30,13 +29,3 @@ class SoftDeleteObjectAdminForm(ModelForm):
         if commit:
             model.save()
         return model
-
-class ChangeSetAdminForm(ChangeSetForm):
-    pass
-
-class SoftDeleteRecordAdminForm(ModelForm):
-    class Meta:
-        model = SoftDeleteRecord
-        readonly_fields = ('created', )
-        exclude = ('content_type', 'object_id', 'changeset')
-
