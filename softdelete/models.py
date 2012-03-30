@@ -13,13 +13,13 @@ class SoftDeleteQuerySet(query.QuerySet):
         qs.__class__ = SoftDeleteQuerySet
         return qs
     
-    def soft_delete(self, using='default', *args, **kwargs):
+    def soft_delete(self, using='default', do_related=True, *args, **kwargs):
         if not len(self):
             return
         logging.debug("STARTING QUERYSET SOFT-DELETE: %s. %s" % (self, len(self)))
         for obj in self:
             logging.debug(" -----  CALLING soft_delete() on %s" % obj)
-            obj.soft_delete(using, *args, **kwargs)
+            obj.soft_delete(using, do_related, *args, **kwargs)
 
     def undelete(self, using='default', *args, **kwargs):
         logging.debug("UNDELETING %s" % self)
@@ -96,15 +96,16 @@ class SoftDeleteObject(models.Model):
 
     def soft_delete(self, *args, **kwargs):
         using = kwargs.get('using', settings.DATABASES['default'])
+        do_related = kwargs.pop('do_related', True)
         pre_soft_delete.send(sender=self.__class__,
                              instance=self,
                              using=using)
         logging.debug('SOFT DELETING type: %s, %s' % (type(self), self))
         self.deleted_at = datetime.today()
         self.save()
-        for related in self._meta.get_all_related_objects():
-            print related
-            self._do_soft_delete(related)
+        if do_related:
+            for related in self._meta.get_all_related_objects():
+                self._do_soft_delete(related)
         logging.debug("FINISHED SOFT DELETING RELATED %s" % self)
         post_soft_delete.send(sender=self.__class__,
                               instance=self,
