@@ -19,12 +19,12 @@ class SoftDeleteQuerySet(query.QuerySet):
         logging.debug("STARTING QUERYSET SOFT-DELETE: %s. %s" % (self, len(self)))
         for obj in self:
             logging.debug(" -----  CALLING soft_delete() on %s" % obj)
-            obj.soft_delete(using, do_related, *args, **kwargs)
+            obj.soft_delete(using=using, do_related=do_related, *args, **kwargs)
 
-    def undelete(self, using='default', *args, **kwargs):
+    def undelete(self, using='default', do_related=True, *args, **kwargs):
         logging.debug("UNDELETING %s" % self)
         for obj in self:
-            obj.undelete()
+            obj.undelete(using=using, do_related=do_related, *args, **kwargs)
         logging.debug("FINISHED UNDELETING %s" %self)
 
 
@@ -86,10 +86,10 @@ class SoftDeleteObject(models.Model):
 
     deleted = property(get_deleted, set_deleted)
 
-    def _do_soft_delete(self, related):
+    def _do_soft_delete(self, related, using, do_related):
         rel = related.get_accessor_name()
         try:
-            getattr(self, rel).all().soft_delete()
+            getattr(self, rel).all().soft_delete(using=using, do_related=do_related)
         except AttributeError:
             # getattr(self, rel).__class__.objects.all().soft_delete()
             pass
@@ -105,19 +105,35 @@ class SoftDeleteObject(models.Model):
         self.save()
         if do_related:
             for related in self._meta.get_all_related_objects():
-                self._do_soft_delete(related)
+                self._do_soft_delete(related, using, do_related)
         logging.debug("FINISHED SOFT DELETING RELATED %s" % self)
         post_soft_delete.send(sender=self.__class__,
                               instance=self,
                               using=using)
 
-    def undelete(self, using='default'):
+    def _do_undelete(self, related, using, do_related):
+        rel = related.get_accessor_name()
+        try:
+            getattr(self, rel).soft_deleted_set().undelete(using=using, do_related=do_related)
+        except AttributeError:
+            # getattr(self, rel).__class__.objects.all().soft_delete()
+            pass
+
+    def undelete(self, *args, **kwargs):
         logging.debug('UNDELETING %s' % self)
+        using = kwargs.get('using', settings.DATABASES['default'])
+        do_related = kwargs.pop('do_related', True)
         pre_undelete.send(sender=self.__class__,
                           instance=self,
                           using=using)
         self.deleted_at = None
         self.save()
+        if do_related:
+            for related in self._meta.get_all_related_objects():
+                try:
+                    self._do_undelete(related, using, do_related)
+                except AttributeError:
+                    raise
         post_undelete.send(sender=self.__class__,
                            instance=self,
                            using=using)
