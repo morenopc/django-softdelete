@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import query
 from django.db import models
 from datetime import datetime
@@ -90,7 +91,7 @@ class SoftDeleteObject(models.Model):
         rel = related.get_accessor_name()
         try:
             getattr(self, rel).all().soft_delete(using=using, do_related=do_related)
-        except AttributeError:
+        except AttributeError, ObjectDoesNotExist:
             # getattr(self, rel).__class__.objects.all().soft_delete()
             pass
 
