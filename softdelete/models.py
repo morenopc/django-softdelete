@@ -91,7 +91,7 @@ class SoftDeleteObject(models.Model):
         rel = related.get_accessor_name()
         try:
             getattr(self, rel).all().soft_delete(using=using, do_related=do_related)
-        except AttributeError, ObjectDoesNotExist:
+        except (AttributeError, ObjectDoesNotExist):
             # getattr(self, rel).__class__.objects.all().soft_delete()
             pass
 
