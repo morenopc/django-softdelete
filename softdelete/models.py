@@ -59,6 +59,34 @@ class SoftDeleteManager(models.Manager):
         qs.__class__ = SoftDeleteQuerySet
         return qs
 
+    def get_or_create(self, **kwargs):
+        logging.debug("GET SOFT-DELETE OR CREATE")
+        defaults = kwargs.pop('defaults', {})
+        lookup = kwargs.copy()
+        for f in self.model._meta.fields:
+            if f.attname in lookup:
+                lookup[f.name] = lookup.pop(f.attname)
+        try:
+            self._for_write = True
+            return self.get(**lookup), False
+        except self.model.DoesNotExist:
+            try:
+                params = dict((k, v) for k, v in kwargs.items() if LOOKUP_SEP not in k)
+                params.update(defaults)
+                obj = self.model(**params)
+                sid = transaction.savepoint(using=self.db)
+                obj.save(force_insert=True, using=self.db)
+                transaction.savepoint_commit(sid, using=self.db)
+                return obj, True
+            except DatabaseError:
+                transaction.savepoint_rollback(sid, using=self.db)
+                exc_info = sys.exc_info()
+                try:
+                    return self.get(**lookup), False
+                except self.model.DoesNotExist:
+                    # Re-raise the DatabaseError with its original traceback.
+                    six.reraise(*exc_info)
+
 
 class SoftDeleteObject(models.Model):
     deleted_at = models.DateTimeField(blank=True, null=True, default=None,
