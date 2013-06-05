@@ -1,8 +1,8 @@
-from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist
-from django.db.models import query
-from django.db import models
 from datetime import datetime
+from django.conf import settings
+from django.db.models import query
+from django.db import models, connections, router, transaction, IntegrityError
+from django.core.exceptions import ObjectDoesNotExist
 import logging
 from softdelete.signals import pre_soft_delete, pre_undelete, \
      post_soft_delete, post_undelete
@@ -60,7 +60,13 @@ class SoftDeleteManager(models.Manager):
         return qs
 
     def get_or_create(self, **kwargs):
-        logging.debug("GET SOFT-DELETE OR CREATE")
+        """
+        Looks up an object with the given kwargs, creating one if necessary.
+        Returns a tuple of (object, created), where created is a boolean
+        specifying whether an object was created.
+        """
+        assert kwargs, \
+                'get_or_create() must be passed at least one keyword argument'
         defaults = kwargs.pop('defaults', {})
         lookup = kwargs.copy()
         for f in self.model._meta.fields:
@@ -71,21 +77,21 @@ class SoftDeleteManager(models.Manager):
             return self.get(**lookup), False
         except self.model.DoesNotExist:
             try:
-                params = dict((k, v) for k, v in kwargs.items() if LOOKUP_SEP not in k)
+                params = dict([(k, v) for k, v in kwargs.items() if '__' not in k])
                 params.update(defaults)
                 obj = self.model(**params)
                 sid = transaction.savepoint(using=self.db)
                 obj.save(force_insert=True, using=self.db)
                 transaction.savepoint_commit(sid, using=self.db)
                 return obj, True
-            except DatabaseError:
+            except IntegrityError, e:
                 transaction.savepoint_rollback(sid, using=self.db)
                 exc_info = sys.exc_info()
                 try:
                     return self.get(**lookup), False
                 except self.model.DoesNotExist:
-                    # Re-raise the DatabaseError with its original traceback.
-                    six.reraise(*exc_info)
+                    # Re-raise the IntegrityError with its original traceback.
+                    raise exc_info[1], None, exc_info[2]
 
 
 class SoftDeleteObject(models.Model):
